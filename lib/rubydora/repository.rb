@@ -94,6 +94,12 @@ module Rubydora
       true
     end
 
+    def events
+      require 'rss'
+      events_data = client['rss'].get
+      RSS::Parser.parse(events_data)
+    end
+
     protected
 
     # Load fallback API implementations for older versions of Fedora
