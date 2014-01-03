@@ -1,6 +1,7 @@
 require 'active_support/core_ext/hash/indifferent_access'
 require 'active_support/core_ext/class'
 require 'active_support/core_ext/module'
+require 'stringio'
 
 module Rubydora
 
@@ -340,9 +341,16 @@ module Rubydora
       # When we discontinue ruby 1.8.7 support we can remove the `|| ''` part.
       content_type = query_options.delete(:content_type) || query_options[:mimeType] || (MIME::Types.type_for(file.path || '').first if file.respond_to? :path) || 'application/octet-stream'
       run_hook :before_add_datastream, :pid => pid, :dsid => dsid, :file => file, :options => options
-      str = file.respond_to?(:read) ? file.read : file
+      s = file.respond_to?(:read) ? file.read : file
+      str = s.nil? ? s : StringIO.new(s)
       file.rewind if file.respond_to?(:rewind)
-      client[datastream_url(pid, dsid, query_options)].post(str, :content_type => content_type.to_s, :multipart => true)
+      str.define_singleton_method(:content_type) do
+        content_type
+      end
+      str.define_singleton_method(:path) do
+        ''
+      end
+      client[datastream_url(pid, dsid, query_options)].post(:file => str, :multipart => true)
     rescue Exception => exception
         rescue_with_handler(exception) || raise
     end
@@ -363,14 +371,21 @@ module Rubydora
 
       rest_client_options = {}
       if file
+        s = file.respond_to?(:read) ? file.read : file
+        file.rewind if file.respond_to?(:rewind)
+        str = s.nil? ? s : StringIO.new(s)
+        str.define_singleton_method(:content_type) do
+          content_type
+        end
+        str.define_singleton_method(:path) do
+          ''
+        end
         rest_client_options[:multipart] = true
-        rest_client_options[:content_type] = content_type
+        rest_client_options[:file] = str
       end
 
       run_hook :before_modify_datastream, :pid => pid, :dsid => dsid, :file => file, :content_type => content_type, :options => options
-      str = file.respond_to?(:read) ? file.read : file
-      file.rewind if file.respond_to?(:rewind)
-      client[datastream_url(pid, dsid, query_options)].put(str, rest_client_options)
+      client[datastream_url(pid, dsid, query_options)].put(rest_client_options)
 
     rescue Exception => exception
         rescue_with_handler(exception) || raise
